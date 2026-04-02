@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect } from 'react';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
+import { useChatStore } from '@/store/useChatStore';
 
 const SOCKET_URL = 'ws://localhost:8080/ws';
 
@@ -29,7 +30,8 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
       try {
         const parsed = JSON.parse(lastMessage.data);
         console.log('WS Message received:', parsed);
-        // Additional handling logic here, e.g., integrating with react-query
+        // Notify the Chat Store (The Observer Port)
+        useChatStore.getState().onMessageReceived(parsed);
       } catch (e) {
         console.error('Failed to parse WS message', e);
       }

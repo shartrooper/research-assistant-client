@@ -1,9 +1,21 @@
-import { render, screen} from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import App from '@/App';
 import { WebSocketProvider } from '@/providers/WebSocketProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { act } from 'react';
+import React from 'react';
+
+// Mock react-use-websocket
+vi.mock('react-use-websocket', () => ({
+  __esModule: true,
+  default: vi.fn(() => ({
+    sendMessage: vi.fn(),
+    lastMessage: null,
+    readyState: 1,
+  })),
+  ReadyState: { OPEN: 1 },
+}));
 
 const queryClient = new QueryClient();
 
@@ -18,7 +30,7 @@ describe('App', () => {
         </QueryClientProvider>
       );
     });
-    expect(screen.getByText('Research Assistant')).toBeInTheDocument();
-    expect(screen.getByText('Send Test WS Message')).toBeInTheDocument();
+    expect(screen.getByText('Research Assistant')).toBeDefined();
+    expect(screen.getByText('Conversations')).toBeDefined();
   });
 });
