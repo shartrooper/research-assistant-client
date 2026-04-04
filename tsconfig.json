@@ -23,6 +23,7 @@
     "noFallthroughCasesInSwitch": true,
     /* testing */
     "types": [
+      "vite/client",
       "vitest/globals",
       "@testing-library/jest-dom"
     ],

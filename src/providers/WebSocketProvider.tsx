@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect } from 'react';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { useChatStore } from '@/store/useChatStore';
 
-const SOCKET_URL = 'ws://localhost:8080/ws';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 interface WebSocketContextType {
   canSendMessages: boolean;
@@ -14,7 +14,7 @@ const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
   const {
-    sendMessage: sM,
+    sendMessage: sm,
     lastMessage,
     readyState,
   } = useWebSocket(SOCKET_URL, {
@@ -53,9 +53,9 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
       };
       
       console.log('Sending WS payload:', payload);
-      sM(JSON.stringify(payload));
+      sm(JSON.stringify(payload));
     },
-    [canSendMessages, sM]
+    [canSendMessages, sm]
   );
 
   const contextValue: WebSocketContextType = {
