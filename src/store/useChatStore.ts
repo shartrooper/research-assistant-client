@@ -55,10 +55,16 @@ export const useChatStore = create<ChatStore>(set => ({
 
         const existingTask = context.tasks[taskId];
 
+        let progressSteps = existingTask?.progressSteps || [];
+        if (content.kind === 'status') {
+          progressSteps = [...progressSteps, content.status];
+        }
+
         const updatedTask: Task = {
           id: taskId,
-          content: content,
+          content: (content.kind === 'status' && existingTask) ? existingTask.content : content,
           timestamp: existingTask?.timestamp || Date.now(),
+          progressSteps: progressSteps.length > 0 ? progressSteps : undefined,
         };
 
         // isBusy logic: 

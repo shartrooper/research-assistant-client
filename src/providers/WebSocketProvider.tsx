@@ -6,8 +6,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 interface WebSocketContextType {
   canSendMessages: boolean;
-  sendMessage: (method: string, params: unknown) => void;
-  streamMessage: (method: string, params: unknown) => void;
+  sendMessage: (params: unknown) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -29,7 +28,6 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
     if (lastMessage && lastMessage.data) {
       try {
         const parsed = JSON.parse(lastMessage.data);
-        console.log('WS Message received:', parsed);
         // Notify the Chat Store (The Observer Port)
         useChatStore.getState().onMessageReceived(parsed);
       } catch (e) {
@@ -52,7 +50,6 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
         params,
       };
       
-      console.log('Sending WS payload:', payload);
       sm(JSON.stringify(payload));
     },
     [canSendMessages, sm]
@@ -60,8 +57,7 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
 
   const contextValue: WebSocketContextType = {
     canSendMessages,
-    sendMessage: (method, params) => rawSendMessage(method || 'message/send', params),
-    streamMessage: (method, params) => rawSendMessage(method || 'message/stream', params),
+    sendMessage: (params) => rawSendMessage('message/send', params),
   };
 
   return (

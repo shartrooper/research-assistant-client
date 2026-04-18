@@ -11,7 +11,7 @@ export const MessageInput = () => {
     if (!text.trim() || isBusy || !activeContextId) return;
 
     // Send via WebSocket
-    sendMessage('message/send', {
+    sendMessage({
       contextId: activeContextId,
       taskId: `user-${Date.now()}`,
       message: {

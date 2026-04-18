@@ -33,6 +33,7 @@ export interface Task {
   id: string;
   content: TaskContent;
   timestamp: number;
+  progressSteps?: string[];
 }
 
 export interface Context {

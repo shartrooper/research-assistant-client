@@ -87,4 +87,61 @@ describe('Integration: WebSocket to Store Flow', () => {
 
     expect(useChatStore.getState().isBusy).toBe(false);
   });
+
+  it('should accumulate status updates in progressSteps and preserve them in the final message', () => {
+    const store = useChatStore.getState();
+
+    const status1 = {
+      jsonrpc: '2.0' as const,
+      method: 'message/send',
+      params: {
+        contextId: 'ctx-1',
+        taskId: 'task-1',
+        message: { kind: 'status', status: 'Searching...' } as StatusTask
+      }
+    };
+
+    const status2 = {
+      jsonrpc: '2.0' as const,
+      method: 'message/send',
+      params: {
+        contextId: 'ctx-1',
+        taskId: 'task-1',
+        message: { kind: 'status', status: 'Structuring...' } as StatusTask
+      }
+    };
+
+    act(() => {
+      store.onMessageReceived(status1);
+      store.onMessageReceived(status2);
+    });
+
+    const stateAfterStatus = useChatStore.getState();
+    const taskAfterStatus = stateAfterStatus.contexts['ctx-1'].tasks['task-1'];
+    expect(taskAfterStatus.progressSteps).toEqual(['Searching...', 'Structuring...']);
+
+    const finalMessage = {
+      jsonrpc: '2.0' as const,
+      method: 'message/send',
+      params: {
+        contextId: 'ctx-1',
+        taskId: 'task-1',
+        message: {
+          kind: 'message',
+          messageId: 'msg-1',
+          role: 'assistant',
+          parts: [{ kind: 'text', text: 'Result' }]
+        } as MessageTask
+      }
+    };
+
+    act(() => {
+      store.onMessageReceived(finalMessage);
+    });
+
+    const stateFinal = useChatStore.getState();
+    const taskFinal = stateFinal.contexts['ctx-1'].tasks['task-1'];
+    expect(taskFinal.content.kind).toBe('message');
+    expect(taskFinal.progressSteps).toEqual(['Searching...', 'Structuring...']);
+  });
 });
