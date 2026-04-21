@@ -1,4 +1,3 @@
-import React from 'react';
 import { useChatStore } from '@/store/useChatStore';
 
 export const Sidebar = () => {
@@ -16,7 +15,7 @@ export const Sidebar = () => {
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-2">
-        {Object.values(contexts).map((ctx) => (
+        {Object.values(contexts).map((ctx,row) => (
           <button
             key={ctx.id}
             onClick={() => setActiveContext(ctx.id)}
@@ -24,7 +23,7 @@ export const Sidebar = () => {
               activeContextId === ctx.id ? 'bg-gray-800 text-blue-400 border border-blue-900' : 'hover:bg-gray-800 text-gray-300'
             }`}
           >
-            {ctx.id}
+            Chat Window - {row+1}
           </button>
         ))}
       </div>
