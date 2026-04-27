@@ -4,9 +4,20 @@ import { useChatStore } from '@/store/useChatStore';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
+interface SendMessagePayload {
+  contextId: string;
+  taskId: string;
+  message: {
+    kind: 'message';
+    messageId: string;
+    role: 'user' | 'assistant';
+    parts: { kind: 'text'; text: string }[];
+  };
+}
+
 interface WebSocketContextType {
   canSendMessages: boolean;
-  sendMessage: (params: unknown) => void;
+  sendMessage: (payload: SendMessagePayload) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -28,6 +39,7 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
     if (lastMessage && lastMessage.data) {
       try {
         const parsed = JSON.parse(lastMessage.data);
+        console.debug('[WS] Incoming frame:', parsed);
         // Notify the Chat Store (The Observer Port)
         useChatStore.getState().onMessageReceived(parsed);
       } catch (e) {
@@ -57,7 +69,19 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
 
   const contextValue: WebSocketContextType = {
     canSendMessages,
-    sendMessage: (params) => rawSendMessage('message/send', params),
+    sendMessage: ({ contextId, message }) => {
+      // Translate our domain shape → A2A wire format.
+      const a2aParams = {
+        contextId,
+        message: {
+          messageId: message.messageId,
+          role: message.role,
+          contextId,
+          parts: message.parts.map((p) => ({ kind: p.kind, text: p.text })),
+        },
+      };
+      rawSendMessage('message/stream', a2aParams);
+    },
   };
 
   return (

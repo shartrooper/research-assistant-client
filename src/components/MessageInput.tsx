@@ -5,27 +5,28 @@ import { useChatStore } from '@/store/useChatStore';
 export const MessageInput = () => {
   const [text, setText] = useState('');
   const { sendMessage } = useWebSocketProvider();
-  const { isBusy, activeContextId } = useChatStore();
+  const { isBusy, activeContextId, onMessageReceived } = useChatStore();
 
   const handleSend = () => {
     if (!text.trim() || isBusy || !activeContextId) return;
 
-    // Send via WebSocket
-    sendMessage({
-      contextId: activeContextId,
-      taskId: `user-${Date.now()}`,
-      message: {
-        kind: 'message',
-        messageId: `msg-${Date.now()}`,
-        role: 'user',
-        parts: [{ kind: 'text', text: text.trim() }]
-      }
+    const taskId = `user-${Date.now()}`;
+    const message = {
+      kind: 'message' as const,
+      messageId: `msg-${Date.now()}`,
+      role: 'user' as const,
+      parts: [{ kind: 'text' as const, text: text.trim() }],
+    };
+
+    onMessageReceived({
+      method: 'message/send',
+      params: { contextId: activeContextId, taskId, message },
+      jsonrpc: '2.0'
     });
 
+    sendMessage({ contextId: activeContextId, taskId, message });
+
     setText('');
-    // Note: The store should probably be set to busy here, 
-    // or when the first 'status' or 'response' comes back.
-    // For now, let's just let the flow continue.
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
