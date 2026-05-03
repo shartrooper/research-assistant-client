@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act } from 'react';
 import { useChatStore } from '@/store/useChatStore';
-import { MessageTask, StatusTask } from '@/domain/models';
 import { JSONRPCRequest } from '@/domain/ports';
 
 
 describe('Integration: WebSocket to Store Flow', () => {
-  beforeEach(() => {
+  beforeEach(()=> {
     useChatStore.getState().reset();
   });
 
@@ -46,17 +45,17 @@ describe('Integration: WebSocket to Store Flow', () => {
 
   it('should update an existing task in-place for status updates and set isBusy', () => {
     const store = useChatStore.getState();
+    act(() => {
+      store.setActiveContext('ctx-1');
+      store.addContext('ctx-1');
+    });
 
     const initialStatus = {
       jsonrpc: '2.0' as const,
-      method: 'message/send',
-      params: {
-        contextId: 'ctx-1',
-        taskId: 'task-1',
-        message: {
-          kind: 'status',
-          status: 'Searching...',
-        } as StatusTask
+      id: 'req-1',
+      result: {
+        kind: 'status',
+        message: 'Searching...',
       }
     };
 
@@ -68,16 +67,21 @@ describe('Integration: WebSocket to Store Flow', () => {
 
     const finalReply = {
       jsonrpc: '2.0' as const,
-      method: 'message/send',
-      params: {
+      id: 'req-1',
+      result: {
+        kind: 'status-update',
         contextId: 'ctx-1',
         taskId: 'task-1',
-        message: {
-          kind: 'message',
-          messageId: 'msg-final',
-          role: 'assistant',
-          parts: [{ kind: 'text', text: 'Here is your answer.' }]
-        } as MessageTask
+        final: true,
+        status: {
+          state: 'completed',
+          message: {
+            kind: 'message',
+            messageId: 'msg-final',
+            role: 'assistant',
+            parts: [{ kind: 'text', text: 'Here is your answer.' }]
+          }
+        }
       }
     };
 
@@ -88,27 +92,23 @@ describe('Integration: WebSocket to Store Flow', () => {
     expect(useChatStore.getState().isBusy).toBe(false);
   });
 
-  it('should accumulate status updates in progressSteps and preserve them in the final message', () => {
+  it('should overwrite status updates in progressSteps and preserve the latest in the final message', () => {
     const store = useChatStore.getState();
+    act(() => {
+      store.setActiveContext('ctx-1');
+      store.addContext('ctx-1');
+    });
 
     const status1 = {
       jsonrpc: '2.0' as const,
-      method: 'message/send',
-      params: {
-        contextId: 'ctx-1',
-        taskId: 'task-1',
-        message: { kind: 'status', status: 'Searching...' } as StatusTask
-      }
+      id: 'req-1',
+      result: { kind: 'status', message: 'Searching...' }
     };
 
     const status2 = {
       jsonrpc: '2.0' as const,
-      method: 'message/send',
-      params: {
-        contextId: 'ctx-1',
-        taskId: 'task-1',
-        message: { kind: 'status', status: 'Structuring...' } as StatusTask
-      }
+      id: 'req-1',
+      result: { kind: 'status', message: 'Structuring...' }
     };
 
     act(() => {
@@ -117,21 +117,26 @@ describe('Integration: WebSocket to Store Flow', () => {
     });
 
     const stateAfterStatus = useChatStore.getState();
-    const taskAfterStatus = stateAfterStatus.contexts['ctx-1'].tasks['task-1'];
-    expect(taskAfterStatus.progressSteps).toEqual(['Searching...', 'Structuring...']);
+    const taskAfterStatus = stateAfterStatus.contexts['ctx-1'].tasks['assistant-ctx-1'];
+    expect(taskAfterStatus.progressSteps).toEqual(['Structuring...']);
 
     const finalMessage = {
       jsonrpc: '2.0' as const,
-      method: 'message/send',
-      params: {
+      id: 'req-1',
+      result: {
+        kind: 'status-update',
         contextId: 'ctx-1',
-        taskId: 'task-1',
-        message: {
-          kind: 'message',
-          messageId: 'msg-1',
-          role: 'assistant',
-          parts: [{ kind: 'text', text: 'Result' }]
-        } as MessageTask
+        taskId: 'assistant-ctx-1',
+        final: true,
+        status: {
+          state: 'completed',
+          message: {
+            kind: 'message',
+            messageId: 'msg-1',
+            role: 'assistant',
+            parts: [{ kind: 'text', text: 'Result' }]
+          }
+        }
       }
     };
 
@@ -140,8 +145,8 @@ describe('Integration: WebSocket to Store Flow', () => {
     });
 
     const stateFinal = useChatStore.getState();
-    const taskFinal = stateFinal.contexts['ctx-1'].tasks['task-1'];
+    const taskFinal = stateFinal.contexts['ctx-1'].tasks['assistant-ctx-1'];
     expect(taskFinal.content.kind).toBe('message');
-    expect(taskFinal.progressSteps).toEqual(['Searching...', 'Structuring...']);
+    expect(taskFinal.progressSteps).toEqual(['Structuring...']);
   });
 });

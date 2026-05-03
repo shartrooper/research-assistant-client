@@ -3,9 +3,19 @@ export type TaskKind = 'message' | 'status' | 'artifact';
 export interface TextPart {
   kind: 'text';
   text: string;
+  data?: never;
 }
 
-export type MessagePart = TextPart;
+export interface DataPart {
+  kind: 'data';
+  data: Record<string, unknown>;
+  text?: never;
+}
+
+export type MessagePart = TextPart | DataPart;
+
+export const isTextPart = (part: MessagePart): part is TextPart => part.kind === 'text';
+export const isDataPart = (part: MessagePart): part is DataPart => part.kind === 'data';
 
 export interface MessageTask {
   kind: 'message';

@@ -30,9 +30,20 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
           <div className={`p-4 rounded-lg shadow-sm ${
             content.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200 border border-gray-700'
           }`}>
-            {content.parts.map((part, i) => (
-              <p key={i} className="whitespace-pre-wrap">{part.text}</p>
-            ))}
+            {content.parts.map((part, i) => {
+              if (part.kind === 'text') {
+                return <p key={i} className="whitespace-pre-wrap">{part.text}</p>;
+              }
+              if (part.kind === 'data') {
+                return (
+                  <div key={i} className="mt-2 p-2 bg-black bg-opacity-30 rounded text-xs font-mono overflow-x-auto">
+                    <div className="text-blue-400 mb-1 font-bold uppercase tracking-tighter text-[10px]">Data Attachment</div>
+                    <pre>{JSON.stringify(part.data, null, 2)}</pre>
+                  </div>
+                );
+              }
+              return null;
+            })}
           </div>
           <div className="mt-1 text-xs text-gray-500 uppercase font-semibold">
             {content.role}

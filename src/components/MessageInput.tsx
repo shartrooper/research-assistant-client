@@ -24,7 +24,7 @@ export const MessageInput = () => {
       jsonrpc: '2.0'
     });
 
-    sendMessage({ contextId: activeContextId, taskId, message });
+    sendMessage({ contextId: activeContextId, message });
 
     setText('');
   };

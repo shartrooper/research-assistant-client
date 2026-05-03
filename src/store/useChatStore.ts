@@ -69,7 +69,7 @@ export const useChatStore = create<ChatStore>(set => ({
         // Find the most-recent task (in-flight assistant task).
         const taskId = `assistant-${contextId}`;
         const existingTask = context.tasks[taskId];
-        const progressSteps = [...(existingTask?.progressSteps ?? []), statusText];
+        const progressSteps = [statusText];
         const updatedTask: Task = {
           id: taskId,
           content: existingTask?.content ?? { kind: 'status', status: statusText },
@@ -88,13 +88,20 @@ export const useChatStore = create<ChatStore>(set => ({
     }
 
     // 2. A2A TaskStatusUpdateEvent: { type: 'TaskStatusUpdateEvent', contextId, taskId, status, final }
-    if (result['type'] === 'TaskStatusUpdateEvent') {
+    if (result['type'] === 'TaskStatusUpdateEvent' || result['kind'] === 'status-update') {
       const contextId = String(result['contextId'] ?? '');
       const taskId = String(result['taskId'] ?? `assistant-${contextId}`);
       const status = result['status'] as Record<string, unknown> | undefined;
       const isFinal = Boolean(result['final']);
       const statusState = String(status?.['state'] ?? '');
       const statusMsg = status?.['message'] as Record<string, unknown> | undefined;
+
+      let progressText: string | undefined;
+      if (statusMsg) {
+        const parts = (statusMsg['parts'] as Record<string, unknown>[]) ?? [];
+        const textPart = parts.find((p) => p['type'] === 'text' || p['kind'] === 'text');
+        if (textPart) progressText = String(textPart['text'] ?? '');
+      }
 
       set((state) => {
         const base = upsertTask(
@@ -104,6 +111,7 @@ export const useChatStore = create<ChatStore>(set => ({
           statusMsg
             ? mapA2AMessage(statusMsg, 'assistant')
             : { kind: 'status', status: statusState },
+          !isFinal ? (progressText || (statusState !== 'completed' ? statusState : undefined)) : undefined
         );
         return { ...base, isBusy: !isFinal };
       });
@@ -154,6 +162,7 @@ function upsertTask(
   contextId: string,
   taskId: string,
   content: TaskContent,
+  progressText?: string,
 ) {
   const context = state.contexts[contextId] ?? {
     id: contextId,
@@ -163,8 +172,10 @@ function upsertTask(
   };
   const existingTask = context.tasks[taskId];
   let progressSteps = existingTask?.progressSteps ?? [];
-  if (content.kind === 'status') {
-    progressSteps = [...progressSteps, content.status];
+  if (progressText) {
+    progressSteps = [progressText];
+  } else if (content.kind === 'status') {
+    progressSteps = [content.status];
   }
   const updatedTask: Task = {
     id: taskId,
@@ -189,11 +200,23 @@ function mapA2AMessage(msg: Record<string, unknown>, fallbackRole: 'user' | 'ass
   const role = (msg['role'] as 'user' | 'assistant') ?? fallbackRole;
   const rawParts = (msg['parts'] as unknown[]) ?? [];
   const parts = rawParts
-    .filter((p) => (p as Record<string, unknown>)['type'] === 'text' || (p as Record<string, unknown>)['kind'] === 'text')
-    .map((p) => ({
-      kind: 'text' as const,
-      text: String((p as Record<string, unknown>)['text'] ?? ''),
-    }));
+    .map((p) => {
+      const part = p as Record<string, unknown>;
+      if (part['type'] === 'text' || part['kind'] === 'text') {
+        return {
+          kind: 'text' as const,
+          text: String(part['text'] ?? ''),
+        };
+      }
+      if (part['type'] === 'data' || part['kind'] === 'data') {
+        return {
+          kind: 'data' as const,
+          data: (part['data'] as Record<string, unknown>) ?? {},
+        };
+      }
+      return null;
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null);
   return {
     kind: 'message',
     messageId: String(msg['messageId'] ?? `msg-${Date.now()}`),

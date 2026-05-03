@@ -6,7 +6,6 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
 interface SendMessagePayload {
   contextId: string;
-  taskId: string;
   message: {
     kind: 'message';
     messageId: string;
