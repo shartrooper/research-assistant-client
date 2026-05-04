@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import {useRef, useEffect, useMemo} from 'react';
 import { useChatStore } from '@/store/useChatStore';
 import { TaskRenderer } from './TaskRenderer';
 
@@ -7,7 +7,7 @@ export const ChatArea = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeContext = activeContextId ? contexts[activeContextId] : null;
-  const tasks = activeContext ? Object.values(activeContext.tasks).sort((a, b) => a.timestamp - b.timestamp) : [];
+  const tasks = useMemo(()=>activeContext ? Object.values(activeContext.tasks).sort((a, b) => a.timestamp - b.timestamp) : [],[activeContext]);
 
   useEffect(() => {
     if (scrollRef.current) {

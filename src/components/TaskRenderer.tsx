@@ -8,14 +8,14 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
 
     return (
       <div className="mb-4 space-y-2 p-3 bg-gray-900 border border-gray-800 rounded-lg text-sm text-gray-400">
-        {progressSteps.map((step, i) => (
+        {progressSteps.map((_step, i) => (
           <div key={i} className="flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full ${
               (i === progressSteps.length - 1 && content.kind === 'status') 
                 ? 'bg-blue-400 animate-pulse' 
                 : 'bg-gray-600'
             }`}></div>
-            <span>{step}</span>
+            <span>{ !progressSteps.length ? 'In progress...' : 'Completed.'}</span>
           </div>
         ))}
       </div>

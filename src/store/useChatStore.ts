@@ -14,6 +14,14 @@ interface ChatState {
 
 type ChatStore = ChatState & IncomingMessageObserver;
 
+
+const assertIsString = (val: unknown): string | null => {
+  if (typeof val !== "string") {
+    return null;
+  }
+  return val;
+}
+
 export const useChatStore = create<ChatStore>(set => ({
   contexts: {},
   activeContextId: null,
@@ -56,9 +64,11 @@ export const useChatStore = create<ChatStore>(set => ({
 
     const result = message.result as Record<string, unknown>;
 
-    // 1. Redis pubsub status update: { kind: 'status', type, message }
+    // 1. Redis pub sub status update: { kind: 'status', type, message }
     if (result['kind'] === 'status') {
-      const statusText = String(result['message'] ?? result['type'] ?? 'Working…');
+      const message = assertIsString(result['message']);
+      const type = assertIsString(result['type']);
+      const statusText= message ?? type ?? 'Working…';
       // We don't have a contextId from this frame — append to whichever
       // task is currently in-flight (identified by isBusy + activeContextId).
       set((state) => {
