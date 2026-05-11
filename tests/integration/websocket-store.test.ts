@@ -133,7 +133,7 @@ describe('Integration: WebSocket to Store Flow', () => {
     expect(useChatStore.getState().isBusy).toBe(false);
   });
 
-  it('should overwrite status updates in progressSteps and preserve the latest in the final message', () => {
+  it('should create a new task per status frame and a completed task on final', () => {
     const store = useChatStore.getState();
     act(() => {
       store.setActiveContext('ctx-1');
@@ -143,13 +143,13 @@ describe('Integration: WebSocket to Store Flow', () => {
     const status1 = {
       jsonrpc: '2.0' as const,
       id: 'req-1',
-      result: { kind: 'status', message: 'Searching...' }
+      result: { kind: 'status', type: 'SEARCH_REQUESTED', message: 'chess players' }
     };
 
     const status2 = {
       jsonrpc: '2.0' as const,
       id: 'req-1',
-      result: { kind: 'status', message: 'Structuring...' }
+      result: { kind: 'status', type: 'STRUCTURED_DATA_READY', message: '' }
     };
 
     act(() => {
@@ -158,8 +158,10 @@ describe('Integration: WebSocket to Store Flow', () => {
     });
 
     const stateAfterStatus = useChatStore.getState();
-    const taskAfterStatus = stateAfterStatus.contexts['ctx-1'].tasks['assistant-ctx-1'];
-    expect(taskAfterStatus.progressSteps).toEqual(['Structuring...']);
+    const tasks = Object.values(stateAfterStatus.contexts['ctx-1'].tasks);
+    // Each status frame creates its own task
+    expect(tasks.length).toBe(2);
+    expect(tasks.every(t => t.content.kind === 'status')).toBe(true);
 
     const finalMessage = {
       jsonrpc: '2.0' as const,
@@ -167,7 +169,7 @@ describe('Integration: WebSocket to Store Flow', () => {
       result: {
         kind: 'status-update',
         contextId: 'ctx-1',
-        taskId: 'assistant-ctx-1',
+        taskId: 'task-final',
         final: true,
         status: {
           state: 'completed',
@@ -186,8 +188,17 @@ describe('Integration: WebSocket to Store Flow', () => {
     });
 
     const stateFinal = useChatStore.getState();
-    const taskFinal = stateFinal.contexts['ctx-1'].tasks['assistant-ctx-1'];
-    expect(taskFinal.content.kind).toBe('message');
-    expect(taskFinal.progressSteps).toEqual(['Structuring...']);
+    const tasksFinal = Object.values(stateFinal.contexts['ctx-1'].tasks);
+    // 2 status tasks + 1 artifact task + 1 completed task
+    expect(tasksFinal.length).toBe(4);
+
+    const artifactTask = stateFinal.contexts['ctx-1'].tasks['task-final'];
+    expect(artifactTask.content.kind).toBe('message');
+
+    const completedTask = tasksFinal.find(
+      t => t.content.kind === 'status' && (t.content as { statusType?: string }).statusType === 'COMPLETED'
+    );
+    expect(completedTask).toBeDefined();
+    expect(useChatStore.getState().isBusy).toBe(false);
   });
 });

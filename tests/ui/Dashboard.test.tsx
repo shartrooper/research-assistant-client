@@ -22,7 +22,7 @@ vi.mock('react-use-websocket', () => ({
 
 describe('Dashboard UI', () => {
   it('should render the sidebar and the main chat area', () => {
-    (useChatStore as any).mockReturnValue({
+    (useChatStore as never).mockReturnValue({
       contexts: {
         'ctx-1': { id: 'ctx-1', tasks: {}, createdAt: Date.now(), updatedAt: Date.now() },
       },
@@ -41,7 +41,7 @@ describe('Dashboard UI', () => {
   });
 
   it('should disable input when isBusy is true', () => {
-    (useChatStore as any).mockReturnValue({
+    (useChatStore as never).mockReturnValue({
       contexts: {
         'ctx-1': { id: 'ctx-1', tasks: {}, createdAt: Date.now(), updatedAt: Date.now() },
       },

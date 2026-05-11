@@ -47,26 +47,7 @@ const ErrorMessageView = ({ parts }: { parts: MessagePart[] }) => {
 };
 
 export const TaskRenderer = ({ task }: { task: Task }) => {
-  const { content, progressSteps } = task;
-
-  const renderProgress = () => {
-    if (!progressSteps || progressSteps.length === 0) return null;
-
-    return (
-      <div className="mb-4 space-y-2 p-3 bg-gray-900 border border-gray-800 rounded-lg text-sm text-gray-400">
-        {progressSteps.map((_step, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <div className={`w-2 h-2 rounded-full ${
-              (i === progressSteps.length - 1 && content.kind === 'status')
-                ? 'bg-blue-400 animate-pulse'
-                : 'bg-gray-600'
-            }`}></div>
-            <span>{ !progressSteps.length ? 'In progress...' : 'Completed.'}</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
+  const { content } = task;
 
   if (content.kind === 'message') {
     const hasError = content.parts.some(p => isDataPart(p) && isErrorMeta(p.data));
@@ -82,7 +63,6 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
 
     return (
       <div className="flex flex-col">
-        {content.role === 'assistant' && renderProgress()}
         <div className={`mb-4 max-w-2xl ${content.role === 'user' ? 'ml-auto' : 'mr-auto'}`}>
           <div className={`p-4 rounded-lg shadow-sm ${
             content.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200 border border-gray-700'
@@ -111,7 +91,13 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
   }
 
   if (content.kind === 'status') {
-    return renderProgress();
+    const isCompleted = content.statusType === 'COMPLETED';
+    return (
+      <div className="mb-1 flex items-center gap-2 text-sm">
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-gray-600'}`} />
+        <span className={isCompleted ? 'text-green-400' : 'text-gray-500'}>{content.status}</span>
+      </div>
+    );
   }
 
   if (content.kind === 'artifact') {

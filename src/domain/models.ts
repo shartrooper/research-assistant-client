@@ -56,6 +56,7 @@ export interface MessageTask {
 export interface StatusTask {
   kind: 'status';
   status: string;
+  statusType?: string;
 }
 
 export interface ArtifactTask {
@@ -72,7 +73,6 @@ export interface Task {
   id: string;
   content: TaskContent;
   timestamp: number;
-  progressSteps?: string[];
 }
 
 export interface Context {

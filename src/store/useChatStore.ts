@@ -65,65 +65,56 @@ export const useChatStore = create<ChatStore>(set => ({
     const result = message.result as Record<string, unknown>;
 
     // 1. Redis pub sub status update: { kind: 'status', type, message }
+    // Each frame creates a new individual task so progress accumulates in the chat.
     if (result['kind'] === 'status') {
-      const message = assertIsString(result['message']);
+      const msg = assertIsString(result['message']);
       const type = assertIsString(result['type']);
-      const statusText= message ?? type ?? 'Working…';
-      // We don't have a contextId from this frame — append to whichever
-      // task is currently in-flight (identified by isBusy + activeContextId).
+
+      const statusLabels: Record<string, string> = {
+        SEARCH_REQUESTED: msg ? `Searching: ${msg}` : 'Searching…',
+        STRUCTURED_DATA_READY: 'Data structured',
+        SUMMARY_REQUESTED: 'Generating summary…',
+        SUMMARY_COMPLETE: 'Summary complete',
+      };
+      const statusText = (type && statusLabels[type]) ?? msg ?? type ?? 'Working…';
+
       set((state) => {
         if (!state.activeContextId) return {};
         const contextId = state.activeContextId;
-        const context = state.contexts[contextId];
-        if (!context) return {};
-        // Find the most-recent task (in-flight assistant task).
-        const taskId = `assistant-${contextId}`;
-        const existingTask = context.tasks[taskId];
-        const progressSteps = [statusText];
-        const updatedTask: Task = {
-          id: taskId,
-          content: existingTask?.content ?? { kind: 'status', status: statusText },
-          timestamp: existingTask?.timestamp ?? Date.now(),
-          progressSteps,
-        };
-        return {
-          isBusy: true,
-          contexts: {
-            ...state.contexts,
-            [contextId]: { ...context, tasks: { ...context.tasks, [taskId]: updatedTask }, updatedAt: Date.now() },
-          },
-        };
+        const taskId = `status-${type ?? 'update'}-${Date.now()}`;
+        const content: TaskContent = { kind: 'status', status: statusText, statusType: type ?? undefined };
+        return { ...upsertTask(state, contextId, taskId, content), isBusy: true };
       });
       return;
     }
 
     // 2. A2A TaskStatusUpdateEvent: { type: 'TaskStatusUpdateEvent', contextId, taskId, status, final }
+    // Non-final frames are skipped — they duplicate what kind:'status' frames already showed.
+    // Only the final frame is handled: it posts the artifact data and a "Research completed" message.
     if (result['type'] === 'TaskStatusUpdateEvent' || result['kind'] === 'status-update') {
+      const isFinal = Boolean(result['final']);
+      if (!isFinal) return;
+
       const contextId = String(result['contextId'] ?? '');
       const taskId = String(result['taskId'] ?? `assistant-${contextId}`);
       const status = result['status'] as Record<string, unknown> | undefined;
-      const isFinal = Boolean(result['final']);
       const statusState = String(status?.['state'] ?? '');
       const statusMsg = status?.['message'] as Record<string, unknown> | undefined;
 
-      let progressText: string | undefined;
-      if (statusMsg) {
-        const parts = (statusMsg['parts'] as Record<string, unknown>[]) ?? [];
-        const textPart = parts.find((p) => p['type'] === 'text' || p['kind'] === 'text');
-        if (textPart) progressText = String(textPart['text'] ?? '');
-      }
-
       set((state) => {
-        const base = upsertTask(
-          state,
+        const artifactContent: TaskContent = statusMsg
+          ? mapA2AMessage(statusMsg, 'assistant', statusState === 'failed' ? 'failed' : undefined)
+          : { kind: 'status', status: statusState };
+        const base = upsertTask(state, contextId, taskId, artifactContent);
+
+        const completedContent: TaskContent = { kind: 'status', status: 'Research completed', statusType: 'COMPLETED' };
+        const withCompleted = upsertTask(
+          { contexts: base.contexts },
           contextId,
-          taskId,
-          statusMsg
-            ? mapA2AMessage(statusMsg, 'assistant', statusState === 'failed' ? 'failed' : undefined)
-            : { kind: 'status', status: statusState },
-          !isFinal ? (progressText || (statusState !== 'completed' ? statusState : undefined)) : undefined
+          `completed-${Date.now()}`,
+          completedContent,
         );
-        return { ...base, isBusy: !isFinal };
+        return { ...withCompleted, isBusy: false };
       });
       return;
     }
@@ -169,11 +160,10 @@ export const useChatStore = create<ChatStore>(set => ({
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function upsertTask(
-  state: { contexts: Record<string, Context>; isBusy: boolean },
+  state: { contexts: Record<string, Context> },
   contextId: string,
   taskId: string,
   content: TaskContent,
-  progressText?: string,
 ) {
   const context = state.contexts[contextId] ?? {
     id: contextId,
@@ -182,17 +172,10 @@ function upsertTask(
     updatedAt: Date.now(),
   };
   const existingTask = context.tasks[taskId];
-  let progressSteps = existingTask?.progressSteps ?? [];
-  if (progressText) {
-    progressSteps = [progressText];
-  } else if (content.kind === 'status') {
-    progressSteps = [content.status];
-  }
   const updatedTask: Task = {
     id: taskId,
-    content: content.kind === 'status' && existingTask ? existingTask.content : content,
+    content,
     timestamp: existingTask?.timestamp ?? Date.now(),
-    progressSteps: progressSteps.length > 0 ? progressSteps : undefined,
   };
   return {
     contexts: {
