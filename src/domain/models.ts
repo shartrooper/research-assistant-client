@@ -17,11 +17,40 @@ export type MessagePart = TextPart | DataPart;
 export const isTextPart = (part: MessagePart): part is TextPart => part.kind === 'text';
 export const isDataPart = (part: MessagePart): part is DataPart => part.kind === 'data';
 
+export type ErrorCode =
+  | 'QUOTA_EXCEEDED'
+  | 'POLICY_VIOLATION'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'CONTEXT_TOO_LARGE'
+  | 'INTERNAL_FAILURE'
+  | 'QUERY_INVALID';
+
+export type ErrorSource = 'llm' | 'search' | 'concierge' | 'researcher';
+
+export type RecoveryType = 'retry' | 'wait' | 'rephrase' | 'contact' | 'upgrade';
+
+export interface ErrorMetadata {
+  kind: 'error_meta';
+  code: ErrorCode;
+  source: ErrorSource;
+  recovery?: {
+    type: RecoveryType;
+    wait_after?: number;
+    suggestion?: string;
+  };
+  telemetry?: Record<string, unknown>;
+}
+
+export function isErrorMeta(data: unknown): data is ErrorMetadata {
+  return typeof data === 'object' && data !== null && (data as Record<string, unknown>)['kind'] === 'error_meta';
+}
+
 export interface MessageTask {
   kind: 'message';
   messageId: string;
   role: 'user' | 'assistant';
   parts: MessagePart[];
+  state?: 'failed';
 }
 
 export interface StatusTask {

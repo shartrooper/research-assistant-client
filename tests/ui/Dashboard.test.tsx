@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import App from '@/App';
 import { useChatStore } from '@/store/useChatStore';
 import { WebSocketProvider } from '@/providers/WebSocketProvider';
-import React from 'react';
 
 // Mock the store for UI testing
 vi.mock('@/store/useChatStore', () => ({

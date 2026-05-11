@@ -92,6 +92,47 @@ describe('Integration: WebSocket to Store Flow', () => {
     expect(useChatStore.getState().isBusy).toBe(false);
   });
 
+  it('should set state: "failed" on MessageTask when TaskStatusUpdateEvent has state failed', () => {
+    const store = useChatStore.getState();
+    act(() => {
+      store.setActiveContext('ctx-1');
+      store.addContext('ctx-1');
+    });
+
+    const failedEvent = {
+      jsonrpc: '2.0' as const,
+      id: 'req-2',
+      result: {
+        kind: 'status-update',
+        contextId: 'ctx-1',
+        taskId: 'task-err',
+        final: true,
+        status: {
+          state: 'failed',
+          message: {
+            kind: 'message',
+            messageId: 'msg-err',
+            role: 'assistant',
+            parts: [
+              { kind: 'text', text: 'Daily request limit reached.' },
+              { kind: 'data', data: { kind: 'error_meta', code: 'QUOTA_EXCEEDED', source: 'llm', recovery: { type: 'wait', wait_after: 60 } } }
+            ]
+          }
+        }
+      }
+    };
+
+    act(() => { store.onMessageReceived(failedEvent); });
+
+    const task = useChatStore.getState().contexts['ctx-1'].tasks['task-err'];
+    expect(task.content.kind).toBe('message');
+    if (task.content.kind === 'message') {
+      expect(task.content.state).toBe('failed');
+      expect(task.content.parts).toHaveLength(2);
+    }
+    expect(useChatStore.getState().isBusy).toBe(false);
+  });
+
   it('should overwrite status updates in progressSteps and preserve the latest in the final message', () => {
     const store = useChatStore.getState();
     act(() => {

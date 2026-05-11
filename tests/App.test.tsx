@@ -4,7 +4,6 @@ import { WebSocketProvider } from '@/providers/WebSocketProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import { act } from 'react';
-import React from 'react';
 
 // Mock react-use-websocket
 vi.mock('react-use-websocket', () => ({

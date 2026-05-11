@@ -119,7 +119,7 @@ export const useChatStore = create<ChatStore>(set => ({
           contextId,
           taskId,
           statusMsg
-            ? mapA2AMessage(statusMsg, 'assistant')
+            ? mapA2AMessage(statusMsg, 'assistant', statusState === 'failed' ? 'failed' : undefined)
             : { kind: 'status', status: statusState },
           !isFinal ? (progressText || (statusState !== 'completed' ? statusState : undefined)) : undefined
         );
@@ -154,10 +154,11 @@ export const useChatStore = create<ChatStore>(set => ({
       const contextId = String(result['contextId']);
       const taskId = String(result['id'] ?? `assistant-${contextId}`);
       const status = result['status'] as Record<string, unknown>;
+      const finalState = String(status?.['state'] ?? '');
       const statusMsg = status?.['message'] as Record<string, unknown> | undefined;
       if (statusMsg) {
         set((state) => ({
-          ...upsertTask(state, contextId, taskId, mapA2AMessage(statusMsg, 'assistant')),
+          ...upsertTask(state, contextId, taskId, mapA2AMessage(statusMsg, 'assistant', finalState === 'failed' ? 'failed' : undefined)),
           isBusy: false,
         }));
       }
@@ -206,7 +207,11 @@ function upsertTask(
 }
 
 /** Convert a raw A2A Message object (from JSON) into our TaskContent shape. */
-function mapA2AMessage(msg: Record<string, unknown>, fallbackRole: 'user' | 'assistant'): TaskContent {
+function mapA2AMessage(
+  msg: Record<string, unknown>,
+  fallbackRole: 'user' | 'assistant',
+  state?: 'failed',
+): TaskContent {
   const role = (msg['role'] as 'user' | 'assistant') ?? fallbackRole;
   const rawParts = (msg['parts'] as unknown[]) ?? [];
   const parts = rawParts
@@ -232,5 +237,6 @@ function mapA2AMessage(msg: Record<string, unknown>, fallbackRole: 'user' | 'ass
     messageId: String(msg['messageId'] ?? `msg-${Date.now()}`),
     role,
     parts,
+    state,
   };
 }

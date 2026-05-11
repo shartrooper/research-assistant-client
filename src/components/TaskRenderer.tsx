@@ -1,4 +1,50 @@
-import { Task } from '@/domain/models';
+import { useState, useEffect } from 'react';
+import { Task, MessagePart, ErrorMetadata, isTextPart, isDataPart, isErrorMeta } from '@/domain/models';
+
+const WaitCountdown = ({ seconds }: { seconds: number }) => {
+  const [remaining, setRemaining] = useState(seconds);
+  useEffect(() => {
+    if (remaining <= 0) return;
+    const t = setTimeout(() => setRemaining(r => r - 1), 1000);
+    return () => clearTimeout(t);
+  }, [remaining]);
+  if (remaining <= 0) return <span className="text-green-400 text-xs">You can try again now.</span>;
+  return <span className="text-yellow-400 text-xs">Retry available in {remaining}s</span>;
+};
+
+const ErrorMessageView = ({ parts }: { parts: MessagePart[] }) => {
+  const textPart = parts.find(isTextPart);
+  const dataPart = parts.find(isDataPart);
+  const meta: ErrorMetadata | null =
+    dataPart && isErrorMeta(dataPart.data) ? (dataPart.data as ErrorMetadata) : null;
+
+  return (
+    <div className="p-4 rounded-lg border border-red-700 bg-red-950 text-red-200">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-red-400 text-xs font-bold uppercase tracking-wide">Error</span>
+        {meta && <span className="text-red-500 text-xs">{meta.code}</span>}
+      </div>
+      {textPart && <p className="text-sm whitespace-pre-wrap">{textPart.text}</p>}
+      {meta?.recovery && (
+        <div className="mt-2 text-xs text-gray-400">
+          {meta.recovery.type === 'wait' && meta.recovery.wait_after != null && (
+            <WaitCountdown seconds={meta.recovery.wait_after} />
+          )}
+          {(meta.recovery.type === 'rephrase' || meta.recovery.type === 'retry') &&
+            meta.recovery.suggestion && (
+              <p className="italic">{meta.recovery.suggestion}</p>
+          )}
+          {meta.recovery.type === 'contact' && (
+            <p>Please contact support.</p>
+          )}
+          {meta.recovery.type === 'upgrade' && (
+            <p>Upgrade your plan to continue.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TaskRenderer = ({ task }: { task: Task }) => {
   const { content, progressSteps } = task;
@@ -11,8 +57,8 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
         {progressSteps.map((_step, i) => (
           <div key={i} className="flex items-center gap-3">
             <div className={`w-2 h-2 rounded-full ${
-              (i === progressSteps.length - 1 && content.kind === 'status') 
-                ? 'bg-blue-400 animate-pulse' 
+              (i === progressSteps.length - 1 && content.kind === 'status')
+                ? 'bg-blue-400 animate-pulse'
                 : 'bg-gray-600'
             }`}></div>
             <span>{ !progressSteps.length ? 'In progress...' : 'Completed.'}</span>
@@ -23,6 +69,17 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
   };
 
   if (content.kind === 'message') {
+    const hasError = content.parts.some(p => isDataPart(p) && isErrorMeta(p.data));
+
+    if (hasError) {
+      return (
+        <div className="mb-4 max-w-2xl mr-auto">
+          <ErrorMessageView parts={content.parts} />
+          <div className="mt-1 text-xs text-gray-500 uppercase font-semibold">assistant</div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col">
         {content.role === 'assistant' && renderProgress()}
