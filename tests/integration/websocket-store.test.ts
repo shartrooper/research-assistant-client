@@ -201,4 +201,105 @@ describe('Integration: WebSocket to Store Flow', () => {
     expect(completedTask).toBeDefined();
     expect(useChatStore.getState().isBusy).toBe(false);
   });
+
+  it('should update context summary when receiving a summary update', () => {
+    const store = useChatStore.getState();
+    act(() => {
+      store.addContext('ctx-summary');
+    });
+
+    const summaryMessage = {
+      jsonrpc: '2.0' as const,
+      result: {
+        type: 'ContextSummaryUpdate',
+        contextId: 'ctx-summary',
+        summary: 'This is an executive summary of the research.'
+      }
+    };
+
+    act(() => store.onMessageReceived(summaryMessage));
+
+    const context = useChatStore.getState().contexts['ctx-summary'];
+    expect(context.summary).toBe('This is an executive summary of the research.');
+  });
+
+  it('should send session/delete and remove context on success', () => {
+    const store = useChatStore.getState();
+    const mockSendMessage = vi.fn();
+    
+    act(() => {
+      store.addContext('ctx-to-delete');
+      store.setSendMessage(mockSendMessage);
+    });
+
+    act(() => {
+      store.deleteContext('ctx-to-delete');
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledWith('session/delete', { contextId: 'ctx-to-delete' });
+    
+    // Context should still be there until success message
+    expect(useChatStore.getState().contexts['ctx-to-delete']).toBeDefined();
+
+    const successMessage = {
+      jsonrpc: '2.0' as const,
+      result: {
+        status: 'deleted',
+        contextId: 'ctx-to-delete' // Assuming the backend returns the contextId
+      }
+    };
+
+    act(() => {
+      store.onMessageReceived(successMessage);
+    });
+
+    expect(useChatStore.getState().contexts['ctx-to-delete']).toBeUndefined();
+  });
+
+  it('should fetch artifact when report_md_key is present in final status update', async () => {
+    const store = useChatStore.getState();
+    const mockArtifactContent = '# Research Report\n\nThis is the content of the report.';
+    
+    // Mock global fetch
+    vi.stubGlobal('fetch', vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(mockArtifactContent),
+        })
+    ));
+    act(() => {
+      store.addContext('ctx-artifact');
+    });
+
+    const finalReply = {
+      jsonrpc: '2.0' as const,
+      result: {
+        kind: 'status-update',
+        contextId: 'ctx-artifact',
+        taskId: 'task-artifact',
+        final: true,
+        status: {
+          state: 'completed',
+          report_md_key: 'report-123'
+        }
+      }
+    };
+
+    await act(async () => {
+      await store.onMessageReceived(finalReply);
+    });
+
+    const state = useChatStore.getState();
+    const tasks = Object.values(state.contexts['ctx-artifact'].tasks);
+    const artifactTask = tasks.find(t => t.content.kind === 'artifact');
+    
+    expect(artifactTask).toBeDefined();
+    if (artifactTask?.content.kind === 'artifact') {
+      expect(artifactTask.content.content).toBe(mockArtifactContent);
+    }
+    
+    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('report-123'));
+    
+    vi.unstubAllGlobals();
+  });
 });

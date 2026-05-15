@@ -1,6 +1,6 @@
 export interface JSONRPCResponse<P = unknown> {
   jsonrpc: '2.0';
-  id: string | number;
+  id?: string | number;
   result?: P;
   error?: {
     code: number;

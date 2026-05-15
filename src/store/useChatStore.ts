@@ -6,9 +6,12 @@ interface ChatState {
   contexts: Record<string, Context>;
   activeContextId: string | null;
   isBusy: boolean;
+  sendMessage?: (method: string, params: unknown) => void;
 
+  setSendMessage: (fn: (method: string, params: unknown) => void) => void;
   addContext: (id: string) => void;
   setActiveContext: (id: string) => void;
+  deleteContext: (id: string) => void;
   reset: () => void;
 }
 
@@ -40,6 +43,15 @@ export const useChatStore = create<ChatStore>(set => ({
   })),
 
   setActiveContext: (id) => set({ activeContextId: id }),
+
+  setSendMessage: (fn) => set({ sendMessage: fn }),
+
+  deleteContext: (id) => {
+    const { sendMessage } = useChatStore.getState();
+    if (sendMessage) {
+      sendMessage('session/delete', { contextId: id });
+    }
+  },
 
   reset: () => set({ contexts: {}, activeContextId: null, isBusy: false }),
 
@@ -100,6 +112,7 @@ export const useChatStore = create<ChatStore>(set => ({
       const status = result['status'] as Record<string, unknown> | undefined;
       const statusState = String(status?.['state'] ?? '');
       const statusMsg = status?.['message'] as Record<string, unknown> | undefined;
+      const reportKey = status?.['report_md_key'] as string | undefined;
 
       set((state) => {
         const artifactContent: TaskContent = statusMsg
@@ -116,6 +129,23 @@ export const useChatStore = create<ChatStore>(set => ({
         );
         return { ...withCompleted, isBusy: false };
       });
+
+      if (statusState === 'completed' && reportKey) {
+        fetch(`http://localhost:8080/artifacts/${reportKey}`)
+          .then((res) => (res.ok ? res.text() : Promise.reject('Failed to fetch artifact')))
+          .then((text) => {
+            set((state) =>
+              upsertTask(state, contextId, `report-${reportKey}`, {
+                kind: 'artifact',
+                artifactId: reportKey,
+                title: 'Research Report',
+                content: text,
+                mimeType: 'text/markdown',
+              }),
+            );
+          })
+          .catch((err) => console.error('[Artifact] Fetch error:', err));
+      }
       return;
     }
 
@@ -152,6 +182,44 @@ export const useChatStore = create<ChatStore>(set => ({
           ...upsertTask(state, contextId, taskId, mapA2AMessage(statusMsg, 'assistant', finalState === 'failed' ? 'failed' : undefined)),
           isBusy: false,
         }));
+      }
+    }
+
+    // 5. Context Summary Update: { type: 'ContextSummaryUpdate', contextId, summary }
+    if (result['type'] === 'ContextSummaryUpdate') {
+      const contextId = String(result['contextId'] ?? '');
+      const summary = String(result['summary'] ?? '');
+      if (contextId && summary) {
+        set((state) => {
+          const context = state.contexts[contextId];
+          if (!context) return {};
+          return {
+            contexts: {
+              ...state.contexts,
+              [contextId]: {
+                ...context,
+                summary,
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      }
+      return;
+    }
+
+    // 6. Session Deletion Response: { status: 'deleted', contextId }
+    if (result['status'] === 'deleted' || result['type'] === 'SessionDeletedEvent') {
+      const contextId = String(result['contextId'] ?? '');
+      if (contextId) {
+        set((state) => {
+          const newContexts = { ...state.contexts };
+          delete newContexts[contextId];
+          return {
+            contexts: newContexts,
+            activeContextId: state.activeContextId === contextId ? null : state.activeContextId,
+          };
+        });
       }
     }
   },

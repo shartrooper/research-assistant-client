@@ -38,7 +38,19 @@ export const ChatArea = () => {
         className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar"
       >
         <div className="max-w-4xl mx-auto w-full">
-          {tasks.length === 0 ? (
+          {activeContext?.summary && (
+            <div className="mb-8 p-6 bg-blue-900 bg-opacity-20 border border-blue-800 rounded-xl shadow-lg animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <h3 className="text-xs font-bold text-blue-400 uppercase tracking-[0.2em]">Executive Summary</h3>
+              </div>
+              <p className="text-gray-200 leading-relaxed italic text-lg">
+                "{activeContext.summary}"
+              </p>
+            </div>
+          )}
+
+          {!tasks.length && !activeContext?.summary ? (
             <div className="text-center text-gray-600 mt-20 italic">
               No messages in this context yet.
             </div>

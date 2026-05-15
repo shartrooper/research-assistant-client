@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Task, MessagePart, ErrorMetadata, isTextPart, isDataPart, isErrorMeta } from '@/domain/models';
 
 const WaitCountdown = ({ seconds }: { seconds: number }) => {
@@ -18,6 +19,23 @@ const ErrorMessageView = ({ parts }: { parts: MessagePart[] }) => {
   const meta: ErrorMetadata | null =
     dataPart && isErrorMeta(dataPart.data) ? (dataPart.data as ErrorMetadata) : null;
 
+  const getInstructions = (code: string) => {
+    switch (code) {
+      case 'POLICY_VIOLATION':
+        return 'Please review our usage guidelines and ensure your prompt complies with safety standards.';
+      case 'VAGUE_PROMPT':
+        return 'Try providing more specific details or context to help the assistant understand your request.';
+      case 'QUOTA_EXCEEDED':
+        return 'You have reached your daily limit. Please wait or upgrade your plan to continue.';
+      case 'CONTEXT_TOO_LARGE':
+        return 'The conversation is too long. Try starting a new chat or summarizing previous points.';
+      default:
+        return null;
+    }
+  };
+
+  const instruction = meta ? getInstructions(meta.code) : null;
+
   return (
     <div className="p-4 rounded-lg border border-red-700 bg-red-950 text-red-200">
       <div className="flex items-center gap-2 mb-2">
@@ -25,6 +43,14 @@ const ErrorMessageView = ({ parts }: { parts: MessagePart[] }) => {
         {meta && <span className="text-red-500 text-xs">{meta.code}</span>}
       </div>
       {textPart && <p className="text-sm whitespace-pre-wrap">{textPart.text}</p>}
+      
+      {instruction && (
+        <div className="mt-3 pt-3 border-t border-red-900/50">
+          <p className="text-xs font-semibold text-red-400 uppercase mb-1">How to fix</p>
+          <p className="text-sm text-red-300 italic">{instruction}</p>
+        </div>
+      )}
+
       {meta?.recovery && (
         <div className="mt-2 text-xs text-gray-400">
           {meta.recovery.type === 'wait' && meta.recovery.wait_after != null && (
@@ -101,11 +127,19 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
   }
 
   if (content.kind === 'artifact') {
+    const isMarkdown = content.mimeType === 'text/markdown' || content.mimeType === 'text/x-markdown';
     return (
-      <div className="mb-4 p-4 bg-gray-900 border border-gray-800 rounded-lg shadow-inner">
-        <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase tracking-widest">{content.title}</h4>
-        <div className="p-2 bg-black rounded text-xs font-mono text-green-400 overflow-x-auto">
-          {content.content}
+      <div className="mb-6 bg-gray-800 border border-gray-700 rounded-xl overflow-hidden shadow-xl">
+        <div className="px-4 py-2 bg-gray-900 border-b border-gray-700 flex justify-between items-center">
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{content.title}</h4>
+          <span className="text-[10px] text-gray-500 font-mono uppercase">{content.mimeType}</span>
+        </div>
+        <div className="p-6 prose prose-invert prose-blue max-w-none">
+          {isMarkdown ? (
+            <ReactMarkdown>{content.content}</ReactMarkdown>
+          ) : (
+            <pre className="text-sm font-mono text-green-400 whitespace-pre-wrap">{content.content}</pre>
+          )}
         </div>
       </div>
     );

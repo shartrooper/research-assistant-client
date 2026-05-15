@@ -6,28 +6,42 @@ import { WebSocketProvider } from '@/providers/WebSocketProvider';
 
 // Mock the store for UI testing
 vi.mock('@/store/useChatStore', () => ({
-  useChatStore: vi.fn(),
-}));
-
-// Mock react-use-websocket for the provider
-vi.mock('react-use-websocket', () => ({
-  __esModule: true,
-  default: vi.fn(() => ({
-    sendMessage: vi.fn(),
-    lastMessage: null,
-    readyState: 1,
-  })),
-  ReadyState: { OPEN: 1 },
+  useChatStore: Object.assign(
+    vi.fn((selector) => {
+      // Default state for components that use the hook
+      const state = {
+        contexts: {},
+        activeContextId: null,
+        isBusy: false,
+        setSendMessage: vi.fn(),
+        addContext: vi.fn(),
+        setActiveContext: vi.fn(),
+      };
+      return selector ? selector(state) : state;
+    }),
+    {
+      getState: vi.fn(() => ({
+        onMessageReceived: vi.fn(),
+        setSendMessage: vi.fn(),
+      })),
+    }
+  ),
 }));
 
 describe('Dashboard UI', () => {
   it('should render the sidebar and the main chat area', () => {
-    (useChatStore as never).mockReturnValue({
-      contexts: {
-        'ctx-1': { id: 'ctx-1', tasks: {}, createdAt: Date.now(), updatedAt: Date.now() },
-      },
-      activeContextId: 'ctx-1',
-      isBusy: false,
+    (useChatStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) => {
+      const state = {
+        contexts: {
+          'ctx-1': { id: 'ctx-1', tasks: {}, createdAt: Date.now(), updatedAt: Date.now() },
+        },
+        activeContextId: 'ctx-1',
+        isBusy: false,
+        setSendMessage: vi.fn(),
+        addContext: vi.fn(),
+        setActiveContext: vi.fn(),
+      };
+      return selector ? selector(state) : state;
     });
 
     render(
@@ -41,12 +55,18 @@ describe('Dashboard UI', () => {
   });
 
   it('should disable input when isBusy is true', () => {
-    (useChatStore as never).mockReturnValue({
-      contexts: {
-        'ctx-1': { id: 'ctx-1', tasks: {}, createdAt: Date.now(), updatedAt: Date.now() },
-      },
-      activeContextId: 'ctx-1',
-      isBusy: true,
+    (useChatStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) => {
+      const state = {
+        contexts: {
+          'ctx-1': { id: 'ctx-1', tasks: {}, createdAt: Date.now(), updatedAt: Date.now() },
+        },
+        activeContextId: 'ctx-1',
+        isBusy: true,
+        setSendMessage: vi.fn(),
+        addContext: vi.fn(),
+        setActiveContext: vi.fn(),
+      };
+      return selector ? selector(state) : state;
     });
 
     render(

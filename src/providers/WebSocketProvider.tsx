@@ -17,11 +17,13 @@ interface SendMessagePayload {
 interface WebSocketContextType {
   canSendMessages: boolean;
   sendMessage: (payload: SendMessagePayload) => void;
+  rawSendMessage: (method: string, params: unknown) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
+  const setSendMessage = useChatStore(state => state.setSendMessage);
   const {
     sendMessage: sm,
     lastMessage,
@@ -33,19 +35,6 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
   });
 
   const canSendMessages = readyState === ReadyState.OPEN;
-
-  useEffect(() => {
-    if (lastMessage && lastMessage.data) {
-      try {
-        const parsed = JSON.parse(lastMessage.data);
-        console.debug('[WS] Incoming frame:', parsed);
-        // Notify the Chat Store (The Observer Port)
-        useChatStore.getState().onMessageReceived(parsed);
-      } catch (e) {
-        console.error('Failed to parse WS message', e);
-      }
-    }
-  }, [lastMessage]);
 
   const rawSendMessage = useCallback(
     (method: string, params: unknown) => {
@@ -66,8 +55,26 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
     [canSendMessages, sm]
   );
 
+  useEffect(() => {
+    setSendMessage(rawSendMessage);
+  }, [rawSendMessage, setSendMessage]);
+
+  useEffect(() => {
+    if (lastMessage && lastMessage.data) {
+      try {
+        const parsed = JSON.parse(lastMessage.data);
+        console.debug('[WS] Incoming frame:', parsed);
+        // Notify the Chat Store (The Observer Port)
+        useChatStore.getState().onMessageReceived(parsed);
+      } catch (e) {
+        console.error('Failed to parse WS message', e);
+      }
+    }
+  }, [lastMessage]);
+
   const contextValue: WebSocketContextType = {
     canSendMessages,
+    rawSendMessage,
     sendMessage: ({ contextId, message }) => {
       // Translate our domain shape → A2A wire format.
       const a2aParams = {

@@ -19,9 +19,9 @@ export const MessageInput = () => {
     };
 
     onMessageReceived({
+      jsonrpc: '2.0',
       method: 'message/send',
-      params: { contextId: activeContextId, taskId, message },
-      jsonrpc: '2.0'
+      params: {contextId: activeContextId, taskId, message}
     });
 
     sendMessage({ contextId: activeContextId, message });

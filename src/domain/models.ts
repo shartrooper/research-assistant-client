@@ -78,6 +78,7 @@ export interface Task {
 export interface Context {
   id: string;
   tasks: Record<string, Task>;
+  summary?: string;
   createdAt: number;
   updatedAt: number;
 }
