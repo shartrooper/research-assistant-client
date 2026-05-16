@@ -17,7 +17,7 @@ interface SendMessagePayload {
 interface WebSocketContextType {
   canSendMessages: boolean;
   sendMessage: (payload: SendMessagePayload) => void;
-  rawSendMessage: (method: string, params: unknown) => void;
+  rawSendMessage: (method: string, params: unknown) => string | undefined;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -43,14 +43,16 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
         return;
       }
       
+      const requestId = `req-${Date.now()}`;
       const payload = {
         jsonrpc: '2.0',
-        id: `req-${Date.now()}`,
+        id: requestId,
         method,
         params,
       };
       
       sm(JSON.stringify(payload));
+      return requestId;
     },
     [canSendMessages, sm]
   );

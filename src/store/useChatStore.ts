@@ -6,9 +6,11 @@ interface ChatState {
   contexts: Record<string, Context>;
   activeContextId: string | null;
   isBusy: boolean;
-  sendMessage?: (method: string, params: unknown) => void;
+  sendMessage?: (method: string, params: unknown) => string | undefined;
+  /** Internal tracking for pending deletions to map request IDs back to context IDs */
+  pendingDeletions: Record<string, string>;
 
-  setSendMessage: (fn: (method: string, params: unknown) => void) => void;
+  setSendMessage: (fn: (method: string, params: unknown) => string | undefined) => void;
   addContext: (id: string) => void;
   setActiveContext: (id: string) => void;
   deleteContext: (id: string) => void;
@@ -29,6 +31,7 @@ export const useChatStore = create<ChatStore>(set => ({
   contexts: {},
   activeContextId: null,
   isBusy: false,
+  pendingDeletions: {},
 
   addContext: (id) => set((state) => ({
     contexts: {
@@ -49,11 +52,18 @@ export const useChatStore = create<ChatStore>(set => ({
   deleteContext: (id) => {
     const { sendMessage } = useChatStore.getState();
     if (sendMessage) {
-      sendMessage('session/delete', { contextId: id });
+      const requestId = sendMessage('session/delete', { contextId: id });
+      
+      set(state => ({
+        pendingDeletions: {
+          ...state.pendingDeletions,
+          ...(requestId ? { [requestId]: id } : { [id]: id })
+        }
+      }));
     }
   },
 
-  reset: () => set({ contexts: {}, activeContextId: null, isBusy: false }),
+  reset: () => set({ contexts: {}, activeContextId: null, isBusy: false, pendingDeletions: {} }),
 
   onMessageReceived: (message) => {
     // ── Outgoing user message (optimistic write) ──────────────────────────
@@ -72,6 +82,8 @@ export const useChatStore = create<ChatStore>(set => ({
 
     // ── Incoming server response frame ────────────────────────────────────
     // Server sends: { jsonrpc, id, result: <event | task> }
+    const messageId = 'id' in message ? String(message.id) : null;
+    
     if (!('result' in message) || !message.result) return;
 
     const result = message.result as Record<string, unknown>;
@@ -210,17 +222,37 @@ export const useChatStore = create<ChatStore>(set => ({
 
     // 6. Session Deletion Response: { status: 'deleted', contextId }
     if (result['status'] === 'deleted' || result['type'] === 'SessionDeletedEvent') {
-      const contextId = String(result['contextId'] ?? '');
-      if (contextId) {
-        set((state) => {
-          const newContexts = { ...state.contexts };
-          delete newContexts[contextId];
-          return {
-            contexts: newContexts,
-            activeContextId: state.activeContextId === contextId ? null : state.activeContextId,
-          };
+      let contextId = String(result['contextId'] ?? '');
+      
+      set((state) => {
+        // Fallback: If contextId is missing in response, check pendingDeletions by messageId
+        if (!contextId && messageId && state.pendingDeletions[messageId]) {
+          contextId = state.pendingDeletions[messageId];
+        }
+        // Second Fallback: If only one deletion is pending, assume it's that one
+        if (!contextId && Object.keys(state.pendingDeletions).length === 1) {
+          contextId = Object.values(state.pendingDeletions)[0];
+        }
+
+        if (!contextId) return {};
+
+        const newContexts = { ...state.contexts };
+        delete newContexts[contextId];
+
+        const newPendingDeletions = { ...state.pendingDeletions };
+        // Clean up all entries for this contextId (in case of retries or multiple req-ids)
+        Object.keys(newPendingDeletions).forEach(key => {
+          if (newPendingDeletions[key] === contextId) {
+            delete newPendingDeletions[key];
+          }
         });
-      }
+
+        return {
+          contexts: newContexts,
+          activeContextId: state.activeContextId === contextId ? null : state.activeContextId,
+          pendingDeletions: newPendingDeletions,
+        };
+      });
     }
   },
 }));
