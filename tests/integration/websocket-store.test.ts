@@ -256,17 +256,21 @@ describe('Integration: WebSocket to Store Flow', () => {
     expect(useChatStore.getState().contexts['ctx-to-delete']).toBeUndefined();
   });
 
-  it('should fetch artifact when report_md_key is present in final status update', async () => {
+  it('should fetch report as message when report_md_key is present in final status update', async () => {
     const store = useChatStore.getState();
-    const mockArtifactContent = '# Research Report\n\nThis is the content of the report.';
+    const mockReportContent = '# Research Report\n\nThis is the content of the report.';
     
     // Mock global fetch
-    vi.stubGlobal('fetch', vi.fn(() =>
-        Promise.resolve({
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('report-123')) {
+        return Promise.resolve({
           ok: true,
-          text: () => Promise.resolve(mockArtifactContent),
-        })
-    ));
+          text: () => Promise.resolve(mockReportContent),
+        });
+      }
+      return Promise.reject(new Error('Not found'));
+    }));
+    
     act(() => {
       store.addContext('ctx-artifact');
     });
@@ -289,14 +293,17 @@ describe('Integration: WebSocket to Store Flow', () => {
       await store.onMessageReceived(finalReply);
     });
 
+    // Wait for async fetch
+    await new Promise(resolve => setTimeout(resolve, 50));
+
     const state = useChatStore.getState();
     const tasks = Object.values(state.contexts['ctx-artifact'].tasks);
-    const artifactTask = tasks.find(t => t.content.kind === 'artifact');
+    const reportTask = tasks.find(t => 
+      t.content.kind === 'message' && 
+      t.content.parts.some(p => p.kind === 'text' && p.text === mockReportContent)
+    );
     
-    expect(artifactTask).toBeDefined();
-    if (artifactTask?.content.kind === 'artifact') {
-      expect(artifactTask.content.content).toBe(mockArtifactContent);
-    }
+    expect(reportTask).toBeDefined();
     
     expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('report-123'));
     

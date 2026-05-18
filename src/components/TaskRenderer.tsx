@@ -95,7 +95,11 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
           }`}>
             {content.parts.map((part, i) => {
               if (part.kind === 'text') {
-                return <p key={i} className="whitespace-pre-wrap">{part.text}</p>;
+                return (
+                  <div key={i} className="prose prose-invert prose-blue max-w-none text-inherit">
+                    <ReactMarkdown>{part.text}</ReactMarkdown>
+                  </div>
+                );
               }
               if (part.kind === 'data') {
                 return (

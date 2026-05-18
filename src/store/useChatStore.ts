@@ -124,12 +124,54 @@ export const useChatStore = create<ChatStore>(set => ({
       const status = result['status'] as Record<string, unknown> | undefined;
       const statusState = String(status?.['state'] ?? '');
       const statusMsg = status?.['message'] as Record<string, unknown> | undefined;
-      const reportKey = status?.['report_md_key'] as string | undefined;
+
+      // Extract report keys from status or message parts
+      let mdKey = status?.['report_md_key'] as string | undefined;
+      let jsonKey = status?.['report_json_key'] as string | undefined;
+
+      interface WireMessagePart {
+        kind: string;
+        data?: {
+          report_md_key?: string;
+          report_json_key?: string;
+        };
+      }
+
+      if (statusMsg?.parts && Array.isArray(statusMsg.parts)) {
+        (statusMsg.parts as WireMessagePart[]).forEach((part) => {
+          if (part.kind === 'data' && part.data) {
+            if (part.data.report_md_key) mdKey = part.data.report_md_key;
+            if (part.data.report_json_key) jsonKey = part.data.report_json_key;
+          }
+        });
+      }
 
       set((state) => {
-        const artifactContent: TaskContent = statusMsg
+        let artifactContent: TaskContent = statusMsg
           ? mapA2AMessage(statusMsg, 'assistant', statusState === 'failed' ? 'failed' : undefined)
           : { kind: 'status', status: statusState };
+
+        if (artifactContent.kind === 'message') {
+          artifactContent.parts = artifactContent.parts.filter((part) => {
+            if (part.kind === 'data') {
+              const data = part.data as Record<string, unknown>;
+              const hasReportKey = data['report_md_key'] || data['report_json_key'];
+              if (hasReportKey) {
+                const keys = Object.keys(data);
+                const isOnlyReportInfo = keys.every((k) =>
+                  ['report_md_key', 'report_json_key', 'session_id'].includes(k),
+                );
+                return !isOnlyReportInfo;
+              }
+            }
+            return true;
+          });
+
+          if (artifactContent.parts.length === 0) {
+            artifactContent = { kind: 'status', status: statusState };
+          }
+        }
+
         const base = upsertTask(state, contextId, taskId, artifactContent);
 
         const completedContent: TaskContent = { kind: 'status', status: 'Research completed', statusType: 'COMPLETED' };
@@ -142,21 +184,75 @@ export const useChatStore = create<ChatStore>(set => ({
         return { ...withCompleted, isBusy: false };
       });
 
-      if (statusState === 'completed' && reportKey) {
-        fetch(`http://localhost:8080/artifacts/${reportKey}`)
-          .then((res) => (res.ok ? res.text() : Promise.reject('Failed to fetch artifact')))
-          .then((text) => {
-            set((state) =>
-              upsertTask(state, contextId, `report-${reportKey}`, {
-                kind: 'artifact',
-                artifactId: reportKey,
-                title: 'Research Report',
-                content: text,
-                mimeType: 'text/markdown',
-              }),
-            );
-          })
-          .catch((err) => console.error('[Artifact] Fetch error:', err));
+      if (statusState === 'completed') {
+        const socketUrl = import.meta.env.VITE_SOCKET_URL || 'ws://localhost:8080/ws';
+        const baseUrl = socketUrl.replace('ws://', 'http://').replace('wss://', 'https://').split('/ws')[0];
+        const artifactsBaseUrl = `${baseUrl}/artifacts`;
+
+        if (mdKey) {
+          fetch(`${artifactsBaseUrl}/${mdKey}`)
+            .then((res) => (res.ok ? res.text() : Promise.reject('Failed to fetch artifact')))
+            .then((text) => {
+              set((state) =>
+                upsertTask(state, contextId, `report-md-${mdKey}`, {
+                  kind: 'message',
+                  messageId: `report-md-${mdKey}`,
+                  role: 'assistant',
+                  parts: [{ kind: 'text', text }],
+                }),
+              );
+            })
+            .catch((err) => {
+              console.error('[Artifact] MD Fetch error:', err);
+              set((state) =>
+                upsertTask(state, contextId, `report-md-error-${mdKey}`, {
+                  kind: 'message',
+                  messageId: `report-md-error-${mdKey}`,
+                  role: 'assistant',
+                  parts: [{
+                    kind: 'text',
+                    text: `❌ **Failed to fetch Markdown report.**\n\nPossible reasons:\n- **CORS Policy:** The server at \`${artifactsBaseUrl}\` might be blocking requests from this origin.\n- **Network Error:** The server might be unreachable or offline.\n- **Missing File:** The file \`${mdKey}\` might not exist on the server.`,
+                  }],
+                }),
+              );
+            });
+        }
+
+        if (jsonKey) {
+          fetch(`${artifactsBaseUrl}/${jsonKey}`)
+            .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch artifact')))
+            .then((data) => {
+              const sources = data.structured?.sources || data.sources || [];
+              if (sources.length > 0) {
+                let sourcesMd = '### Sources\n';
+                sources.forEach((s: never) => {
+                  sourcesMd += `* **Query:** ${s.Query}\n  **URL:** ${s.URL}\n  **Snippet:** ${s.Snippet}\n`;
+                });
+                set((state) =>
+                  upsertTask(state, contextId, `report-json-${jsonKey}`, {
+                    kind: 'message',
+                    messageId: `report-json-${jsonKey}`,
+                    role: 'assistant',
+                    parts: [{ kind: 'text', text: sourcesMd }],
+                  }),
+                );
+              }
+            })
+            .catch((err) => {
+              console.error('[Artifact] JSON Fetch error:', err);
+              set((state) =>
+                upsertTask(state, contextId, `report-json-error-${jsonKey}`, {
+                  kind: 'message',
+                  messageId: `report-json-error-${jsonKey}`,
+                  role: 'assistant',
+                  parts: [{
+                    kind: 'text',
+                    text: `❌ **Failed to fetch JSON sources.**\n\nPossible reasons:\n- **CORS Policy:** The server at \`${artifactsBaseUrl}\` might be blocking requests from this origin.\n- **Network Error:** The server might be unreachable or offline.\n- **Invalid Format:** The file \`${jsonKey}\` might not be valid JSON.`,
+                  }],
+                }),
+              );
+            });
+        }
       }
       return;
     }
