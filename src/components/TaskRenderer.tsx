@@ -96,7 +96,7 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
             {content.parts.map((part, i) => {
               if (part.kind === 'text') {
                 return (
-                  <div key={i} className="prose prose-invert prose-blue max-w-none text-inherit">
+                  <div key={i} className="prose prose-invert prose-blue max-w-none text-inherit break-words">
                     <ReactMarkdown>{part.text}</ReactMarkdown>
                   </div>
                 );
@@ -132,18 +132,32 @@ export const TaskRenderer = ({ task }: { task: Task }) => {
 
   if (content.kind === 'artifact') {
     const isMarkdown = content.mimeType === 'text/markdown' || content.mimeType === 'text/x-markdown';
+    const isJson = content.mimeType === 'application/json' || content.title.endsWith('.json');
+    
+    let displayContent = content.content;
+    if (isJson && !isMarkdown) {
+      try {
+        const parsed = JSON.parse(content.content);
+        displayContent = JSON.stringify(parsed, null, 2);
+      } catch (e) {
+        // Not valid JSON or already formatted, keep as is
+      }
+    }
+
     return (
-      <div className="mb-6 bg-gray-800 border border-gray-700 rounded-xl overflow-hidden shadow-xl">
-        <div className="px-4 py-2 bg-gray-900 border-b border-gray-700 flex justify-between items-center">
-          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">{content.title}</h4>
-          <span className="text-[10px] text-gray-500 font-mono uppercase">{content.mimeType}</span>
+      <div className="mb-6 bg-gray-800 border border-gray-700 rounded-xl overflow-hidden shadow-xl flex flex-col min-w-0">
+        <div className="px-4 py-2 bg-gray-900 border-b border-gray-700 flex justify-between items-center gap-4 shrink-0">
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest truncate">{content.title}</h4>
+          <span className="text-[10px] text-gray-500 font-mono uppercase shrink-0">{content.mimeType}</span>
         </div>
-        <div className="p-6 prose prose-invert prose-blue max-w-none">
-          {isMarkdown ? (
-            <ReactMarkdown>{content.content}</ReactMarkdown>
-          ) : (
-            <pre className="text-sm font-mono text-green-400 whitespace-pre-wrap">{content.content}</pre>
-          )}
+        <div className="p-6 overflow-x-auto custom-scrollbar">
+          <div className="prose prose-invert prose-blue max-w-none break-words">
+            {isMarkdown ? (
+              <ReactMarkdown>{displayContent}</ReactMarkdown>
+            ) : (
+              <pre className="text-sm font-mono text-green-400 whitespace-pre-wrap break-all md:break-words">{displayContent}</pre>
+            )}
+          </div>
         </div>
       </div>
     );
